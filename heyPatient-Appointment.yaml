@@ -331,23 +331,26 @@ components:
         participant:
           type: array
           items:
-            type: object
-            properties:
-              actor:
-                type: object
-                properties:
-                  reference:
-                    type: string
-                    example: 'Patient/f0b12095-c1fa-4cd2-85f9-021cf4167663'
-                  display:
-                    type: string
-                    example: 'Patient Demo1'
-              actor:
-                type: object
-                properties:
-                  type:
-                    type: string
-                    example: 'location'
-                  display:
-                    type: string
-                    example: 'Hauptgebäude 2. Stock'
+            anyOf:
+              - $ref: '#/components/schemas/PatientAppointmentParticipant'
+              - $ref: '#/components/schemas/ResourceAppointmentParticipant'
+
+    PatientAppointmentParticipant:
+      type: object
+      properties:
+        reference:
+          type: string
+          example: 'Patient/f0b12095-c1fa-4cd2-85f9-021cf4167663'
+        display:
+          type: string
+          example: 'Patient Demo1'
+
+    ResourceAppointmentParticipant:
+      type: object
+      properties:
+        type:
+          type: string
+          example: 'location'
+        display:
+          type: string
+          example: 'Hauptgebäude 2. Stock'
