@@ -1,0 +1,353 @@
+openapi: 3.0.0
+
+info:
+  description: heyPatient FHIR API draft description. Current use-cases are the
+    registration of a patient to a care-providing hospital and the subsequent
+    transmission of appointment proposals from the care-provider to the patient.
+  version: 1.0.1_8.5.2021
+  title: heyPatient FHIR API v0.3
+  contact:
+    email: juergen.link@heypatient.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  x-logo:
+    url: 'https://fhir.heypatient.com/includes/heypatient-logo.png'
+    altText: heyPatient logo
+servers:
+  - url: https://heypatient-test.azurehealthcareapis.com
+    description: Test environment
+  - url: https://heypatient-staging.azurehealthcareapis.com
+    description: Staging environment
+
+
+security: #falls BearerAuth wird die Auth Funktion eingeblendet. Sonst muss das wohl implizit mitgegeben werden?
+  - oAuthModell: [ ]
+
+
+tags:
+  - name: Pat-Admin
+    description: Patient admission and case management
+  - name: Scheduling/Dispo
+    description: Publish an appointment
+
+paths:
+  /Patient:
+    get:
+      tags:
+        - Pat-Admin
+      summary: Patient registration query - gets new heyPatient registration requests from API
+      parameters:
+        - in: query
+          name: identifier
+          example: http://fhir.heypatient.com/valuesets/KSX-PID|unassigned
+          schema:
+            type: string
+      operationId: getPatients
+      description: Finds and downloads new Patient resources for hospital KSX from the API. Used to select records with KSX-PID="unassigned", to import the relevant demographics into the local patient database, and to subsequently write back the record with local PID assigned (see PUT option).
+      externalDocs:
+        description: JSON example for Patient resource result
+        url: http://fhir.heypatient.com/examples/Demo-Patient.json
+      responses:
+        "200":
+          description: OK - patient list received
+          content:
+            application/json:
+              examples:
+                response:
+                  value: |-
+                    {
+                        "resourceType": "Patient",
+                        "id": "2659064",
+                        "identifier":[
+                        {
+                          "system":"urn:oid:1.2.36.146.595.217.0.1",
+                          "value":"123.3456.678.89",
+                          "assigner":{
+                          "display":"SSN"
+                            }
+                        },
+                        {
+                          "system":"urn:oid:1.2.36.146.595.217.0.1",
+                          "value":"199999a",
+                          "assigner":{
+                              "display":"KSX"
+                            }
+                        }
+                        ],
+                        "name":[
+                            {
+                            "use":"official",
+                            "text":"JÃ¼rgen Link",
+                            "family":"Link",
+                            "given":[
+                                "JÃ¼rgen"
+                              ]
+                              }
+                          ],
+                        "gender":"male",
+                        "birthDate":"1958-05-30"
+                        }
+        "401":
+          description: unauthorized
+        "500":
+          description: bad request
+  /Patient/{resourceId}:
+    put:
+      tags:
+        - Pat-Admin
+      summary: Patient admission confirmation - adds a local patient id (KSX-PID) to the Patient resource on the API
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      operationId: addPatient2
+      description: Adds a patient to the system
+      externalDocs:
+        description: JSON example for Patient resource definition
+        url: http://fhir.heypatient.com/examples/Demo-Patient.json
+      requestBody:
+        $ref: "#/components/requestBodies/PatientResource"
+      responses:
+        "200":
+          description: item updated - the Patient resource was found and updated with the local PID
+        "201":
+          description: item created - the Patient resource was newly created. This is unexpected for the relevant use case.
+        "401":
+          description: unauthorized
+
+  /Appointment/{resourceId}:
+    put:
+      tags:
+        - Scheduling/Dispo
+      summary: Adds/modifies a new Appointment to the API
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      security:
+        - oAuthModell:
+            - write
+            - read
+      operationId: addAppointment
+      description: Uploads a new/modified appointment resource for the referenced Patient to the API. If the Patient resource id is not stored in the local database, a preceding Patient query with the local PID may be required to reference the patient. See "GET /Patient" using the known PID instead of the value "unassigned".
+      externalDocs:
+        description: JSON example for Appointment resource definition
+        url: http://fhir.heypatient.com/examples/Demo-Appointment.json
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentResource"
+        description: Appointment to add
+      responses:
+        "200":
+          description: item updated
+        "201":
+          description: item created
+        "401":
+          description: unauthorized
+        "500":
+          description: bad request
+
+externalDocs:
+  description: Find more info here
+  url: http://fhir.heypatient.com
+
+components:
+  securitySchemes:
+    # BearerAuth:
+    #   type: http
+    #   scheme: basic
+    oAuthModell: # <---- arbitrary name
+      type: oauth2
+      description: This API uses OAuth2 with clientCredentials grant flow.
+      flows:
+        clientCredentials: # <---- OAuth flow(authorizationCode, implicit, password or clientCredentials)
+          tokenUrl: https://login.microsoftonline.com/f049c21e-43d2-4bf5-9209-dbaa9e9e278e/oauth2/token
+          scopes:
+            read: read patient data
+            write: write patient data
+        authorizationCode:
+          authorizationUrl: https://login.microsoftonline.com/f049c21e-43d2-4bf5-9209-dbaa9e9e278e/oauth2/authorize?resource=https://heypatient-test.azurehealthcareapis.com
+          tokenUrl: https://login.microsoftonline.com/f049c21e-43d2-4bf5-9209-dbaa9e9e278e/oauth2/token
+          scopes:
+            write: modify pets in your account
+            read: read your pets
+
+  requestBodies:
+    PatientResource:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PatientResource"
+      description: Patient to add
+
+  schemas:
+    PatientResource:
+      type: object
+      required:
+        - id
+        - identifier
+        - name
+        - gender
+        - birthDate
+        - address
+      properties:
+        resourceType:
+          type: string
+          example: Patient
+        id:
+          type: string
+          format: uuid
+          example: d290f1ee-6c54-4b01-90e6-d701748f0851
+        identifier:
+          type: string
+          format: ssn
+          example: 80756002900028850000
+        name:
+          type: string
+          example: Widget Adapter
+        birthDate:
+          type: string
+          format: date-time
+          example: 2016-08-29T09:12:33.001Z
+        address:
+          type: string
+          example: Hauptstrasse 10 8400 Winterthur
+        phone:
+          type: string
+          example: 408-867-5309
+        contact:
+          type: string
+          example: Peter Muster, Hauptstrasse 12 8400 Winterthur
+        infotext:
+          type: string
+          example: |-
+            {
+            "resourceType": "Patient",
+            "id": "2659064",
+            "identifier":[
+            {
+              "system":"urn:oid:1.2.36.146.595.217.0.1",
+              "value":"123.3456.678.89",
+              "assigner":{
+              "display":"SSN"
+                }
+            },
+            {
+              "system":"urn:oid:1.2.36.146.595.217.0.1",
+              "value":"199999a",
+              "assigner":{
+                  "display":"KSA"
+                }
+            }
+            ],
+            "name":[
+                {
+                "use":"official",
+                "text":"JÃ¼rgen Link",
+                "family":"Link",
+                "given":[
+                    "JÃ¼rgen"
+                  ]
+                  }
+              ],
+            "gender":"male",
+            "birthDate":"1958-05-30"
+            }
+
+    AppointmentResource:
+      type: object
+      required:
+        - id
+        - status
+        - serviceType
+        - description
+        - start
+        - end
+        - participant
+      properties:
+        resourceType:
+          type: string
+          example: Appointment
+        id:
+          type: string
+          example: Appt-SU-SPZ-01
+        identifier:
+          type: array
+          items:
+            type: object
+            properties:
+              use:
+                type: string
+                example: official
+              system:
+                type: string
+                example: 'http://fhir.cistec.com/SPZ/R4/Appointment/id'
+              value:
+                type: string
+                example: '100001'
+              assigner:
+                type: object
+                properties:
+                  reference:
+                    type: string
+                    example: 'Organization/SPZ'
+
+        status:
+          type: string
+          example: pending
+        serviceType:
+          type: array
+          items:
+            type: object
+            properties:
+              coding:
+                type: object
+                properties:
+                  system:
+                    type: string
+                    example: 'urn:oid:2.16.756.5.30.1.237'
+                  code:
+                    type: string
+                    example: SPZBEANGE
+                  display:
+                    type: string
+                    example: 'Beratung Angehöriger'
+        description:
+          type: string
+          example: Beratung Angehöriger
+        start:
+          type: string
+          example: '2021-06-13T08:30:00+01:00'
+        end:
+          type: string
+          example: '2021-06-13T09:30:00+01:00'
+        participant:
+          type: array
+          items:
+            type: object
+            properties:
+              actor:
+                type: object
+                properties:
+                  reference:
+                    type: string
+                    example: 'Patient/f0b12095-c1fa-4cd2-85f9-021cf4167663'
+                  display:
+                    type: string
+                    example: 'Patient Demo1'
+              actor:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    example: 'location'
+                  display:
+                    type: string
+                    example: 'Hauptgebäude 2. Stock'
